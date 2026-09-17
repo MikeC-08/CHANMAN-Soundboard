@@ -8,6 +8,27 @@ let wavesurfer
 let wsRegions
 let currentRegion = null
 
+// 追蹤當前正在播放的音訊物件（用於全域停止按鈕）
+let currentPlayingAudio = null
+
+// --- 1. 全域停止播放邏輯 ---
+function stopAllAudio() {
+  // 1. 停止 Wavesurfer (編輯頁波形)
+  if (wavesurfer && wavesurfer.isPlaying()) {
+    wavesurfer.pause()
+  }
+
+  // 2. 停止 HTML5 Audio (音效庫或試聽音效)
+  if (currentPlayingAudio) {
+    currentPlayingAudio.pause()
+    currentPlayingAudio.currentTime = 0
+    currentPlayingAudio = null
+  }
+}
+
+
+
+
 
 // --- 初始化載入本地資料 ---
 async function loadPersistedData() {
@@ -194,8 +215,29 @@ async function saveSoundConfig() {
   switchTab('sounds')
 }
 
+// --- 2. 修正編輯頁波形區域 (Region) 播放與結束停止邏輯 ---
 document.getElementById('btn-play-editor-region').addEventListener('click', () => {
-  if (currentRegion) currentRegion.play()
+  if (!wavesurfer || !currentRegion) return
+
+  // 先停止其他正在播放的聲音
+  stopAllAudio()
+
+  // 跳轉到選區起點並播放
+  wavesurfer.setTime(currentRegion.start)
+  wavesurfer.play()
+
+  // 監聽播放時間，到達區域 end 時自動暫停
+  const onAudioprocess = () => {
+    const currentTime = wavesurfer.getCurrentTime()
+    if (currentTime >= currentRegion.end) {
+      wavesurfer.pause()
+      wavesurfer.un('audioprocess', onAudioprocess) // 移除監聽器避免重複觸發
+    }
+  }
+
+  // 先移除舊的監聽器再重新註冊
+  wavesurfer.un('audioprocess', onAudioprocess)
+  wavesurfer.on('audioprocess', onAudioprocess)
 })
 
 // --- 音效庫：卡片渲染與播放 ---
@@ -219,11 +261,14 @@ function renderSoundGrid() {
   })
 }
 
+// --- 3. 更新音效庫卡片播放 (同步支援全域停止按鈕) ---
 async function playConfiguredSound(sound) {
+  // 播放新音效前，先停止正在播放的舊音效
+  stopAllAudio()
+
   const deviceId = document.getElementById('device-select').value
   const audio = new Audio(`file://${sound.mediaPath}`)
 
-  // 套用 JSON 記錄的音量，若無紀錄則預設 0.5
   audio.volume = typeof sound.volume === 'number' ? sound.volume : 0.5
 
   if (deviceId && 'setSinkId' in audio) {
@@ -231,15 +276,28 @@ async function playConfiguredSound(sound) {
   }
 
   audio.currentTime = sound.start
+  currentPlayingAudio = audio // 註冊到全域追蹤變數
+
   audio.play()
 
+  // 監聽結束點
   const checkTime = () => {
     if (audio.currentTime >= sound.end) {
       audio.pause()
       audio.removeEventListener('timeupdate', checkTime)
+      if (currentPlayingAudio === audio) {
+        currentPlayingAudio = null
+      }
     }
   }
   audio.addEventListener('timeupdate', checkTime)
+
+  // 音訊自然播放完畢時清理變數
+  audio.addEventListener('ended', () => {
+    if (currentPlayingAudio === audio) {
+      currentPlayingAudio = null
+    }
+  })
 }
 
 // 初始化裝置與本地資料
