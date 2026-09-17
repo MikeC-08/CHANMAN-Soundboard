@@ -14,9 +14,9 @@
     <div class="flex items-center gap-6">
         <div class="text-indigo-400 font-bold text-lg tracking-wide">Soundboard Studio</div>
         <nav class="flex bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs font-medium">
-        <button id="tab-btn-media" onclick="switchTab('media')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">資源庫</button>
-        <button id="tab-btn-editor" onclick="switchTab('editor')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">編輯頁</button>
         <button id="tab-btn-sounds" onclick="switchTab('sounds')" class="px-4 py-1.5 rounded-md bg-indigo-600 text-white transition">音效庫</button>
+        <button id="tab-btn-editor" onclick="switchTab('editor')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">編輯頁</button>
+        <button id="tab-btn-media" onclick="switchTab('media')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">資源庫</button>
         </nav>
     </div>
 
@@ -47,7 +47,7 @@
   <main class="flex-1 p-6 overflow-hidden relative">
 
     <!-- 分頁 1: 資源庫 (Media Library) -->
-    <section id="tab-media" class="h-full flex flex-col">
+    <section id="tab-media" class="h-full flex flex-col hidden">
       <div class="flex justify-between items-center mb-4">
         <!-- 搜尋列 -->
         <input type="text" id="media-search" oninput="filterMediaList()" placeholder="搜尋原始檔案..." class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500 w-64">
@@ -122,35 +122,35 @@
 
     <!-- 分頁 3: 音效庫 (Sound Library) -->
     <!-- 3. 音效庫頁面：改為兩欄式佈局 (左側卡片網格 + 右側播放側邊欄) -->
-    <div id="tab-sounds" class="tab-content hidden flex-1 p-6 overflow-hidden">
-    <div class="flex h-full gap-6">
-        
-        <!-- 左側：音效卡片區域 -->
-        <div class="flex-1 overflow-y-auto">
-        <div id="sound-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <!-- 音效卡片會動態渲染在這裡 -->
-        </div>
-        </div>
-
-        <!-- 右側：目前播放狀態側邊欄 -->
-        <div class="w-80 bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shrink-0">
-        <div>
-            <div class="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
-            <h3 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                正在播放中
-            </h3>
-            <button onclick="stopAllAudio()" class="text-xs text-rose-400 hover:text-rose-300 transition">全部停止</button>
+    <div id="tab-sounds" class="tab-content flex-1 p-6 overflow-hidden">
+        <div class="flex h-full gap-6">
+            
+            <!-- 左側：音效卡片區域 -->
+            <div class="flex-1 overflow-y-auto">
+            <div id="sound-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <!-- 音效卡片會動態渲染在這裡 -->
+            </div>
             </div>
 
-            <!-- 動態顯示正在播放的音效列表 -->
-            <div id="active-playing-list" class="flex flex-col gap-2 max-h-[calc(100vh-220px)] overflow-y-auto">
-            <div id="no-playing-tip" class="text-xs text-slate-500 text-center py-8">目前沒有音效在播放</div>
-            </div>
-        </div>
-        </div>
+            <!-- 右側：目前播放狀態側邊欄 -->
+            <div class="w-80 bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shrink-0">
+            <div>
+                <div class="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
+                <h3 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    正在播放中
+                </h3>
+                <button onclick="stopAllAudio()" class="text-xs text-rose-400 hover:text-rose-300 transition">全部停止</button>
+                </div>
 
-    </div>
+                <!-- 動態顯示正在播放的音效列表 -->
+                <div id="active-playing-list" class="flex flex-col gap-2 max-h-[calc(100vh-220px)] overflow-y-auto">
+                <div id="no-playing-tip" class="text-xs text-slate-500 text-center py-8">目前沒有音效在播放</div>
+                </div>
+            </div>
+            </div>
+
+        </div>
     </div>
 
   </main>

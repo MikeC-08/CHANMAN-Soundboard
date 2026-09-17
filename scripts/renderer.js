@@ -393,6 +393,7 @@ async function confirmDeleteSound(event, soundId, soundName) {
 }
 
 // 核心：多裝置同步播放 (修正版)
+// 核心：多裝置同步播放 (修正 Session 自動移除邏輯)
 async function playConfiguredSound(soundId) {
   const sound = soundConfigs.find(s => s.id === soundId)
   if (!sound) {
@@ -403,33 +404,54 @@ async function playConfiguredSound(soundId) {
   const playingId = 'play_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4)
   const audioInstances = []
 
-  // 確保 targetDevices 內容合法，避免傳入空陣列或無效值
   let targetDevices = selectedDeviceIds.filter(id => id && typeof id === 'string')
   if (targetDevices.length === 0) {
     targetDevices = ['default']
   }
 
+  // 用於追蹤此 Session 中已結束播放的音訊數量
+  let finishedCount = 0
+
+  const handleAudioEnd = () => {
+    finishedCount++
+    // 當所有裝置的播放都完成時，自動從右側側邊欄/Session 中移除
+    if (finishedCount >= targetDevices.length) {
+      stopSession(playingId)
+    }
+  }
+
   for (const deviceId of targetDevices) {
-    // 建立 Audio 實體 (注意：Electron 中必須使用標準絕對路徑格式)
     const formattedPath = sound.mediaPath.startsWith('file://') 
       ? sound.mediaPath 
       : `file://${sound.mediaPath}`
 
     const audio = new Audio(formattedPath)
     audio.volume = typeof sound.volume === 'number' ? sound.volume : 0.5
-
-    // 設定起始時間與結束監聽
     audio.currentTime = sound.start
 
-    const checkTime = () => {
-      if (audio.currentTime >= sound.end) {
+    let hasEnded = false
+    const triggerEndOnce = () => {
+      if (!hasEnded) {
+        hasEnded = true
         audio.pause()
         audio.removeEventListener('timeupdate', checkTime)
+        audio.removeEventListener('ended', triggerEndOnce)
+        handleAudioEnd()
       }
     }
-    audio.addEventListener('timeupdate', checkTime)
 
-    // 先執行播放 (觸發 User Interaction 授權)
+    // 1. 時間到達指定 end 秒數時主動截斷並觸發結束
+    const checkTime = () => {
+      if (audio.currentTime >= sound.end) {
+        triggerEndOnce()
+      }
+    }
+
+    audio.addEventListener('timeupdate', checkTime)
+    // 2. 音檔本身自然播完時觸發結束
+    audio.addEventListener('ended', triggerEndOnce)
+
+    // 播放授權處理
     try {
       const playPromise = audio.play()
       if (playPromise !== undefined) {
@@ -437,15 +459,15 @@ async function playConfiguredSound(soundId) {
       }
     } catch (playError) {
       console.error(`[Audio Play Error] 裝置 ${deviceId} 播放失敗:`, playError)
-      continue // 如果這個裝置播放失敗，繼續嘗試其他裝置
+      triggerEndOnce() // 若播放失敗，同樣計入結束
+      continue
     }
 
-    // 播放啟動後，再切換輸出裝置 (若支援且不是 default)
     if (deviceId !== 'default' && 'setSinkId' in audio) {
       try {
         await audio.setSinkId(deviceId)
       } catch (sinkError) {
-        console.warn(`[SinkId Warning] 切換裝置 ${deviceId} 失敗，保留預設輸出:`, sinkError)
+        console.warn(`[SinkId Warning] 切換裝置 ${deviceId} 失敗:`, sinkError)
       }
     }
 
@@ -456,8 +478,6 @@ async function playConfiguredSound(soundId) {
     const session = { playingId, sound, audioInstances }
     activePlayingSessions.push(session)
     updateActivePlayingSidebar()
-  } else {
-    alert('無法播放音效，請按 F12 開啟 Console 檢查路徑或音訊裝置權限。')
   }
 }
 
