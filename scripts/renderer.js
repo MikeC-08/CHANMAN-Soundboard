@@ -1,12 +1,24 @@
+const { ipcRenderer, webUtils } = require('electron')
+
 let mediaFiles = []
 let soundConfigs = []
-let activeMedia = null // 當前正在編輯的原始檔案
+let activeMedia = null
 
 let wavesurfer
 let wsRegions
 let currentRegion = null
 
-// --- 1. 分頁切換邏輯 ---
+
+// --- 初始化載入本地資料 ---
+async function loadPersistedData() {
+  mediaFiles = await ipcRenderer.invoke('load-media-files')
+  soundConfigs = await ipcRenderer.invoke('load-sound-configs')
+  
+  renderMediaList()
+  renderSoundGrid()
+}
+
+// --- 分頁切換 ---
 function switchTab(tabName) {
   ['media', 'editor', 'sounds'].forEach(name => {
     const section = document.getElementById(`tab-${name}`)
@@ -24,17 +36,17 @@ function switchTab(tabName) {
   })
 }
 
-// --- 2. 資源庫邏輯 ---
-function importMediaFiles(event) {
+// --- 資源庫：匯入與繪製 ---
+
+
+async function importMediaFiles(event) {
   const files = Array.from(event.target.files)
-  files.forEach(file => {
-    mediaFiles.push({
-      id: 'media_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-      name: file.name,
-      path: file.path,
-      url: URL.createObjectURL(file)
-    })
-  })
+  for (const file of files) {
+    // 使用 webUtils 取得真實絕對路徑
+    const path = webUtils.getPathForFile(file)
+    const savedMedia = await ipcRenderer.invoke('import-media', path)
+    mediaFiles.push(savedMedia)
+  }
   renderMediaList()
 }
 
@@ -66,23 +78,34 @@ function filterMediaList() {
   const query = document.getElementById('media-search').value
   renderMediaList(query)
 }
+// --- 1. 更新音量顯示與 Wavesurfer 試聽音量 ---
+function updateVolumeDisplay(val) {
+  document.getElementById('volume-display').textContent = `${val}%`
+  if (wavesurfer) {
+    // Wavesurfer 的 setVolume 接收 0.0 到 1.0 的浮點數
+    wavesurfer.setVolume(val / 100)
+  }
+}
 
-// --- 3. 編輯頁與 Wavesurfer 邏輯 ---
+// --- 編輯頁：Wavesurfer 載入 ---
 function openInEditor(mediaId) {
   activeMedia = mediaFiles.find(m => m.id === mediaId)
   if (!activeMedia) return
 
   document.getElementById('editor-source-title').textContent = activeMedia.name
-  document.getElementById('sound-name-input').value = activeMedia.name.replace(/\.[^/.]+$/, "") // 預設拿檔名當音效名
+  document.getElementById('sound-name-input').value = activeMedia.name.replace(/\.[^/.]+$/, "")
+  
+  // 預設重置音量為 50%
+  document.getElementById('sound-volume-input').value = 50
+  updateVolumeDisplay(50)
 
   switchTab('editor')
 
-  // 初始化或重新載入 Wavesurfer
   if (!wavesurfer) {
     initWavesurfer()
   }
   
-  wavesurfer.load(activeMedia.url)
+  wavesurfer.load(`file://${activeMedia.path}`)
 }
 
 function initWavesurfer() {
@@ -96,6 +119,10 @@ function initWavesurfer() {
   })
 
   wavesurfer.on('ready', () => {
+    // 載入完成時同步音量
+    const currentVol = document.getElementById('sound-volume-input').value
+    wavesurfer.setVolume(currentVol / 100)
+
     wsRegions.clearRegions()
     currentRegion = wsRegions.addRegion({
       start: 0,
@@ -120,34 +147,37 @@ function updateTimeDisplay() {
   document.getElementById('time-range-display').textContent = `${start}s - ${end}s`
 }
 
-// 儲存為 JSON 音效設定檔
-function saveSoundConfig() {
+// 儲存設定至 sound_configs.json
+async function saveSoundConfig() {
   if (!activeMedia || !currentRegion) return
 
   const soundName = document.getElementById('sound-name-input').value.trim() || '未命名音效'
   const shortcut = document.getElementById('sound-shortcut-input').value.trim()
+  const volumeVal = Number(document.getElementById('sound-volume-input').value) / 100 // 轉為 0.0 ~ 1.0
 
   const newSound = {
     id: 'sound_' + Date.now(),
     name: soundName,
     mediaPath: activeMedia.path,
-    mediaUrl: activeMedia.url,
     start: Number(currentRegion.start.toFixed(2)),
     end: Number(currentRegion.end.toFixed(2)),
+    volume: volumeVal, // JSON 寫入音量欄位 (例如: 0.5)
     shortcut: shortcut
   }
 
   soundConfigs.push(newSound)
+
+  await ipcRenderer.invoke('save-sound-configs', soundConfigs)
+
   renderSoundGrid()
-  switchTab('sounds') // 自動跳轉到音效庫
+  switchTab('sounds')
 }
 
-// 試聽編輯區域
 document.getElementById('btn-play-editor-region').addEventListener('click', () => {
   if (currentRegion) currentRegion.play()
 })
 
-// --- 4. 音效庫邏輯 (根據 JSON 設定檔播放) ---
+// --- 音效庫：卡片渲染與播放 ---
 function renderSoundGrid() {
   const grid = document.getElementById('sound-grid')
   grid.innerHTML = ''
@@ -168,10 +198,12 @@ function renderSoundGrid() {
   })
 }
 
-// 播放 JSON 說明的段落
 async function playConfiguredSound(sound) {
   const deviceId = document.getElementById('device-select').value
-  const audio = new Audio(sound.mediaUrl)
+  const audio = new Audio(`file://${sound.mediaPath}`)
+
+  // 套用 JSON 記錄的音量，若無紀錄則預設 0.5
+  audio.volume = typeof sound.volume === 'number' ? sound.volume : 0.5
 
   if (deviceId && 'setSinkId' in audio) {
     await audio.setSinkId(deviceId).catch(console.error)
@@ -189,7 +221,7 @@ async function playConfiguredSound(sound) {
   audio.addEventListener('timeupdate', checkTime)
 }
 
-// 初始化裝置
+// 初始化裝置與本地資料
 async function initDevices() {
   const select = document.getElementById('device-select')
   try {
@@ -210,3 +242,4 @@ async function initDevices() {
 }
 
 initDevices()
+loadPersistedData()

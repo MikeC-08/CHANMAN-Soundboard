@@ -70,28 +70,37 @@
         <div id="waveform" class="w-full bg-slate-900 rounded-lg overflow-hidden border border-slate-800 my-4"></div>
       </div>
 
-      <!-- 音效屬性設定與儲存 -->
-      <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 mt-4 flex flex-col gap-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div>
+        <!-- 音效屬性設定與儲存 -->
+        <!-- 音效屬性設定與儲存 -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 mt-4 flex flex-col gap-4">
+        <div class="grid grid-cols-3 gap-4">
+            <div>
             <label class="block text-xs text-slate-400 mb-1">音效名稱</label>
             <input type="text" id="sound-name-input" placeholder="例如：爆笑聲" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-indigo-500">
-          </div>
-          <div>
+            </div>
+            <div>
             <label class="block text-xs text-slate-400 mb-1">快捷鍵 (Shortcut)</label>
-            <input type="text" id="sound-shortcut-input" placeholder="例如：F1 或 Ctrl+1" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-indigo-500">
-          </div>
+            <input type="text" id="sound-shortcut-input" placeholder="例如：F1" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-indigo-500">
+            </div>
+            <!-- 新增：音量控制拉條 -->
+            <div>
+            <div class="flex justify-between items-center mb-1">
+                <label class="text-xs text-slate-400">預設音量</label>
+                <span id="volume-display" class="text-xs text-indigo-400 font-mono">50%</span>
+            </div>
+            <input type="range" id="sound-volume-input" min="0" max="100" value="50" oninput="updateVolumeDisplay(this.value)" class="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+            </div>
         </div>
 
         <div class="flex justify-between items-center pt-2">
-          <div class="text-xs text-slate-400">
+            <div class="text-xs text-slate-400">
             時間範圍: <span id="time-range-display" class="text-indigo-400 font-mono">0.0s - 0.0s</span>
-          </div>
-          <button onclick="saveSoundConfig()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-2 rounded-lg font-medium transition shadow-lg shadow-indigo-600/20">
+            </div>
+            <button onclick="saveSoundConfig()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-2 rounded-lg font-medium transition shadow-lg shadow-indigo-600/20">
             儲存至音效庫 (生成 JSON)
-          </button>
+            </button>
         </div>
-      </div>
+        </div>
     </section>
 
     <!-- 分頁 3: 音效庫 (Sound Library) -->
