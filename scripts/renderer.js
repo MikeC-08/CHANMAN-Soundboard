@@ -37,7 +37,28 @@ function switchTab(tabName) {
 }
 
 // --- 資源庫：匯入與繪製 ---
+const mediaTab = document.getElementById('tab-media')
 
+// 防止瀏覽器預設開啟檔案的動作
+mediaTab.addEventListener('dragover', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+})
+
+mediaTab.addEventListener('drop', async (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+
+  const files = Array.from(e.dataTransfer.files)
+  for (const file of files) {
+    if (file.type.startsWith('audio/')) {
+      const path = webUtils.getPathForFile(file)
+      const savedMedia = await ipcRenderer.invoke('import-media', path)
+      mediaFiles.push(savedMedia)
+    }
+  }
+  renderMediaList()
+})
 
 async function importMediaFiles(event) {
   const files = Array.from(event.target.files)
