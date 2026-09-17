@@ -81,8 +81,27 @@ ipcMain.handle('save-sound-configs', async (event, configs) => {
   return true
 })
 
+
+ipcMain.handle('load-selected-devices', () => {
+  const configPath = path.join(app.getPath('userData'), 'selected-devices.json')
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    } catch (e) { return [] }
+  }
+  return ['default']
+})
+
+ipcMain.handle('save-selected-devices', (event, deviceIds) => {
+  const configPath = path.join(app.getPath('userData'), 'selected-devices.json')
+  fs.writeFileSync(configPath, JSON.stringify(deviceIds, null, 2))
+  return true
+})
+
 app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+

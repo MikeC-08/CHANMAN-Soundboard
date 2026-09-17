@@ -9,32 +9,36 @@
 </head>
 
 <body class="bg-slate-900 text-slate-100 h-screen flex flex-col select-none overflow-hidden font-sans">
-
-    <!-- 頂部導航列與分頁 Tab -->
+    <!-- 頂部導航列 -->
     <header class="bg-slate-950 border-b border-slate-800 px-6 py-3 flex justify-between items-center">
     <div class="flex items-center gap-6">
         <div class="text-indigo-400 font-bold text-lg tracking-wide">Soundboard Studio</div>
-        
-        <!-- 分頁切換按鈕 -->
         <nav class="flex bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs font-medium">
-        <button id="tab-btn-media" onclick="switchTab('media')" class="px-4 py-1.5 rounded-md bg-indigo-600 text-white transition">資源庫</button>
+        <button id="tab-btn-media" onclick="switchTab('media')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">資源庫</button>
         <button id="tab-btn-editor" onclick="switchTab('editor')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">編輯頁</button>
-        <button id="tab-btn-sounds" onclick="switchTab('sounds')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">音效庫</button>
+        <button id="tab-btn-sounds" onclick="switchTab('sounds')" class="px-4 py-1.5 rounded-md bg-indigo-600 text-white transition">音效庫</button>
         </nav>
     </div>
 
     <div class="flex items-center gap-3">
-        <!-- 新增：全域停止播放按鈕 -->
         <button onclick="stopAllAudio()" class="bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 font-medium">
-        ■ 停止播放
+        ■ 停止所有音效
         </button>
 
-        <!-- 輸出音訊裝置選擇器 -->
-        <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
-        <label class="text-xs text-slate-400">輸出裝置:</label>
-        <select id="device-select" class="bg-transparent text-xs text-slate-200 outline-none cursor-pointer max-w-[200px] truncate">
-            <option value="default">預設揚聲器</option>
-        </select>
+        <!-- 修正：加入 id="device-dropdown-btn" 確保點擊能正確切換顯示狀態 -->
+        <div class="relative">
+        <button id="device-dropdown-btn" onclick="toggleDeviceDropdown()" class="bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2">
+            <span>📢 輸出裝置 (<span id="selected-device-count">0</span>)</span>
+            <span class="text-slate-500 text-[10px]">▼</span>
+        </button>
+        
+        <!-- 多選下拉選單容器 -->
+        <div id="device-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-3 z-50 text-xs">
+            <div class="text-slate-400 font-medium mb-2 border-b border-slate-800 pb-1">選擇輸出聲音的裝置：</div>
+            <div id="device-checkbox-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto">
+            <!-- 動態載入 Checkbox -->
+            </div>
+        </div>
         </div>
     </div>
     </header>
@@ -69,9 +73,15 @@
             <h2 id="editor-source-title" class="text-base font-bold text-indigo-400">未選擇檔案</h2>
             <p class="text-xs text-slate-500">在波形圖上拉選段落，設定起點與終點</p>
           </div>
-          <button id="btn-play-editor-region" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1.5 rounded-lg text-slate-200 transition">
-            ▶ 試聽選取段落
-          </button>
+            <!-- 編輯頁的波形控制按鈕 -->
+            <div class="flex items-center gap-3 mt-4">
+            <button onclick="playEditorRegion()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
+                ▶ 試聽選取段落
+            </button>
+            <button onclick="stopAllAudio()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-lg transition">
+                ■ 停止試聽
+            </button>
+            </div>
         </div>
 
         <!-- 波形圖容器 -->
@@ -111,11 +121,37 @@
     </section>
 
     <!-- 分頁 3: 音效庫 (Sound Library) -->
-    <section id="tab-sounds" class="h-full hidden overflow-y-auto">
-      <div id="sound-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <!-- 音效卡片動態渲染 -->
-      </div>
-    </section>
+    <!-- 3. 音效庫頁面：改為兩欄式佈局 (左側卡片網格 + 右側播放側邊欄) -->
+    <div id="tab-sounds" class="tab-content hidden flex-1 p-6 overflow-hidden">
+    <div class="flex h-full gap-6">
+        
+        <!-- 左側：音效卡片區域 -->
+        <div class="flex-1 overflow-y-auto">
+        <div id="sound-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <!-- 音效卡片會動態渲染在這裡 -->
+        </div>
+        </div>
+
+        <!-- 右側：目前播放狀態側邊欄 -->
+        <div class="w-80 bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shrink-0">
+        <div>
+            <div class="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
+            <h3 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                正在播放中
+            </h3>
+            <button onclick="stopAllAudio()" class="text-xs text-rose-400 hover:text-rose-300 transition">全部停止</button>
+            </div>
+
+            <!-- 動態顯示正在播放的音效列表 -->
+            <div id="active-playing-list" class="flex flex-col gap-2 max-h-[calc(100vh-220px)] overflow-y-auto">
+            <div id="no-playing-tip" class="text-xs text-slate-500 text-center py-8">目前沒有音效在播放</div>
+            </div>
+        </div>
+        </div>
+
+    </div>
+    </div>
 
   </main>
 
