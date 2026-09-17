@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>Electron Soundboard</title>
+  <title>CHANMAN's Soundboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
   <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
@@ -10,38 +10,42 @@
 
 <body class="bg-slate-900 text-slate-100 h-screen flex flex-col select-none overflow-hidden font-sans">
     <!-- 頂部導航列 -->
-    <header class="bg-slate-950 border-b border-slate-800 px-6 py-3 flex justify-between items-center">
-    <div class="flex items-center gap-6">
-        <div class="text-indigo-400 font-bold text-lg tracking-wide">Soundboard Studio</div>
-        <nav class="flex bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs font-medium">
-        <button id="tab-btn-sounds" onclick="switchTab('sounds')" class="px-4 py-1.5 rounded-md bg-indigo-600 text-white transition">音效庫</button>
-        <button id="tab-btn-editor" onclick="switchTab('editor')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">編輯頁</button>
-        <button id="tab-btn-media" onclick="switchTab('media')" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">資源庫</button>
-        </nav>
-    </div>
+<header class="bg-slate-950 border-b border-slate-800 px-6 py-3 flex justify-between items-center">
+  <div class="flex items-center gap-6">
+    <div class="text-indigo-400 font-bold text-lg tracking-wide">CHANMAN's Soundboard</div>
+    <nav class="flex bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs font-medium">
+      <button id="tab-btn-media" onclick="switchTab('media')" data-i18n="nav.media" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">資源庫</button>
+      <button id="tab-btn-editor" onclick="switchTab('editor')" data-i18n="nav.editor" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-slate-200 transition">編輯頁</button>
+      <button id="tab-btn-sounds" onclick="switchTab('sounds')" data-i18n="nav.sounds" class="px-4 py-1.5 rounded-md bg-indigo-600 text-white transition">音效庫</button>
+    </nav>
+  </div>
 
-    <div class="flex items-center gap-3">
-        <button onclick="stopAllAudio()" class="bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 font-medium">
-        ■ 停止所有音效
-        </button>
+  <div class="flex items-center gap-3">
+    <!-- 語言切換選擇器 -->
+    <select id="lang-select" onchange="setLanguage(this.value)" class="bg-slate-900 text-slate-300 text-xs px-2 py-1.5 rounded-lg border border-slate-800 outline-none cursor-pointer">
+      <option value="zh-TW">繁體中文</option>
+      <option value="en">English</option>
+    </select>
 
-        <!-- 修正：加入 id="device-dropdown-btn" 確保點擊能正確切換顯示狀態 -->
-        <div class="relative">
-        <button id="device-dropdown-btn" onclick="toggleDeviceDropdown()" class="bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2">
-            <span>📢 輸出裝置 (<span id="selected-device-count">0</span>)</span>
-            <span class="text-slate-500 text-[10px]">▼</span>
-        </button>
-        
-        <!-- 多選下拉選單容器 -->
-        <div id="device-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-3 z-50 text-xs">
-            <div class="text-slate-400 font-medium mb-2 border-b border-slate-800 pb-1">選擇輸出聲音的裝置：</div>
-            <div id="device-checkbox-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto">
-            <!-- 動態載入 Checkbox -->
-            </div>
-        </div>
-        </div>
+    <button onclick="stopAllAudio()" data-i18n="btn.stopAll" class="bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 font-medium">
+      ■ 停止所有音效
+    </button>
+
+    <!-- 輸出裝置按鈕 -->
+    <div class="relative">
+      <button id="device-dropdown-btn" onclick="toggleDeviceDropdown()" class="bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2">
+        <span>📢 <span data-i18n="device.title">輸出裝置</span> (<span id="selected-device-count">0</span>)</span>
+        <span class="text-slate-500 text-[10px]">▼</span>
+      </button>
+      <!-- 多選下拉選單容器 -->
+      <div id="device-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-3 z-50 text-xs">
+         <div class="text-slate-400 font-medium mb-2 border-b border-slate-800 pb-1" data-i18n="device.subtitle">選擇輸出聲音的裝置：</div>
+         <div id="device-checkbox-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto">
+         <!-- 動態載入 Checkbox -->
+      </div>
     </div>
-    </header>
+  </div>
+</header>
 
   <!-- 主內容區 (三個分頁面板) -->
   <main class="flex-1 p-6 overflow-hidden relative">
@@ -64,22 +68,36 @@
         <!-- 列表由渲染進程動態生成 -->
       </div>
     </section>
-
+    <!-- 資源庫刪除確認 Modal -->
+    <div id="delete-media-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+        <h3 class="text-base font-bold text-slate-100 mb-2">⚠️ <span data-i18n="media.deleteTitle">移除媒體檔案</span></h3>
+        <p id="delete-media-modal-msg" class="text-xs text-slate-400 mb-6 leading-relaxed">確定要從資源庫移除此檔案嗎？原始檔案將會移至資源回收桶。</p>
+        <div class="flex justify-end gap-3">
+          <button onclick="closeDeleteMediaModal()" data-i18n="btn.cancel" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl transition">
+            取消
+          </button>
+          <button id="confirm-delete-media-btn" data-i18n="btn.confirm" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs rounded-xl font-medium transition shadow-lg shadow-rose-600/20">
+            移除並移至回收桶
+          </button>
+        </div>
+      </div>
+    </div>
     <!-- 分頁 2: 編輯頁 (Editor) -->
     <section id="tab-editor" class="h-full hidden flex flex-col justify-between">
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-5">
         <div class="flex justify-between items-center mb-4">
           <div>
-            <h2 id="editor-source-title" class="text-base font-bold text-indigo-400">未選擇檔案</h2>
-            <p class="text-xs text-slate-500">在波形圖上拉選段落，設定起點與終點</p>
+            <h2 id="editor-source-title" class="text-base font-bold text-indigo-400" data-i18n="editor.emptySelection">未選擇檔案</h2>
+            <p class="text-xs text-slate-500" data-i18n="editor.editorTips">在波形圖上拉選段落，設定起點與終點</p>
           </div>
             <!-- 編輯頁的波形控制按鈕 -->
             <div class="flex items-center gap-3 mt-4">
-            <button onclick="playEditorRegion()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
-                ▶ 試聽選取段落
+            <button data-i18n="editor.btnPlayRegion" onclick="playEditorRegion()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
+                ▶ 試聽
             </button>
-            <button onclick="stopAllAudio()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-lg transition">
-                ■ 停止試聽
+            <button data-i18n="editor.btnStopRegion" onclick="stopAllAudio()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-lg transition">
+                ■ 停止
             </button>
             </div>
         </div>
@@ -92,17 +110,17 @@
         <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 mt-4 flex flex-col gap-4">
         <div class="grid grid-cols-3 gap-4">
             <div>
-            <label class="block text-xs text-slate-400 mb-1">音效名稱</label>
+            <label class="block text-xs text-slate-400 mb-1" data-i18n="editor.nameLabel">音效名稱</label>
             <input type="text" id="sound-name-input" placeholder="例如：爆笑聲" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-indigo-500">
             </div>
             <div>
-            <label class="block text-xs text-slate-400 mb-1">快捷鍵 (Shortcut)</label>
+            <label class="block text-xs text-slate-400 mb-1" data-i18n="editor.shortcutLabel">快捷鍵 (Shortcut)</label>
             <input type="text" id="sound-shortcut-input" placeholder="例如：F1" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-indigo-500">
             </div>
             <!-- 新增：音量控制拉條 -->
             <div>
             <div class="flex justify-between items-center mb-1">
-                <label class="text-xs text-slate-400">預設音量</label>
+                <label class="text-xs text-slate-400" data-i18n="editor.volumeLabel">預設音量</label>
                 <span id="volume-display" class="text-xs text-indigo-400 font-mono">50%</span>
             </div>
             <input type="range" id="sound-volume-input" min="0" max="100" value="50" oninput="updateVolumeDisplay(this.value)" class="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
@@ -111,9 +129,9 @@
 
         <div class="flex justify-between items-center pt-2">
             <div class="text-xs text-slate-400">
-            時間範圍: <span id="time-range-display" class="text-indigo-400 font-mono">0.0s - 0.0s</span>
+            <span data-i18n="editor.timeRange">時間範圍:</span> <span id="time-range-display" class="text-indigo-400 font-mono">0.0s - 0.0s</span>
             </div>
-            <button onclick="saveSoundConfig()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-2 rounded-lg font-medium transition shadow-lg shadow-indigo-600/20">
+            <button data-i18n="editor.btnSave" onclick="saveSoundConfig()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-2 rounded-lg font-medium transition shadow-lg shadow-indigo-600/20">
             儲存至音效庫 (生成 JSON)
             </button>
         </div>
@@ -138,14 +156,14 @@
                 <div class="flex justify-between items-center pb-3 border-b border-slate-800 mb-4">
                 <h3 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    正在播放中
+                    <span data-i18n="sidebar.playing">正在播放中 </span>
                 </h3>
-                <button onclick="stopAllAudio()" class="text-xs text-rose-400 hover:text-rose-300 transition">全部停止</button>
+                <button data-i18n="sidebar.stopAll" onclick="stopAllAudio()" class="text-xs text-rose-400 hover:text-rose-300 transition">全部停止</button>
                 </div>
 
                 <!-- 動態顯示正在播放的音效列表 -->
                 <div id="active-playing-list" class="flex flex-col gap-2 max-h-[calc(100vh-220px)] overflow-y-auto">
-                <div id="no-playing-tip" class="text-xs text-slate-500 text-center py-8">目前沒有音效在播放</div>
+                <div data-i18n="sidebar.noPlaying" id="no-playing-tip" class="text-xs text-slate-500 text-center py-8">目前沒有音效在播放</div>
                 </div>
             </div>
             </div>
@@ -154,7 +172,22 @@
     </div>
 
   </main>
-
+    <!-- 刪除確認 Modal 彈出視窗 -->
+    <div id="delete-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+        <h3 class="text-base font-bold text-slate-100 mb-2">⚠️ <span data-i18n="sounds.deleteTitle">刪除確認</span></h3>
+        <p id="delete-modal-msg" class="text-xs text-slate-400 mb-6 leading-relaxed">確定要刪除此音效嗎？</p>
+        <div class="flex justify-end gap-3">
+        <button onclick="closeDeleteModal()" data-i18n="btn.cancel" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl transition">
+            取消
+        </button>
+        <button id="confirm-delete-btn" data-i18n="btn.confirm" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs rounded-xl font-medium transition shadow-lg shadow-rose-600/20">
+            刪除
+        </button>
+        </div>
+    </div>
+    </div>
+  <script src="scripts/i18n.js"></script> <!-- 引入 i18n 檔案 -->
   <script src="scripts/renderer.js"></script>
 </body>
 </html>

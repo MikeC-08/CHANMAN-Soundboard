@@ -17,6 +17,13 @@ let currentPlayingAudio = null // 用於編輯頁單獨試聽
 // 1. 初始化與頁面分頁切換
 // ==========================================
 window.addEventListener('DOMContentLoaded', async () => {
+  const langSelect = document.getElementById('lang-select')
+  if (langSelect && typeof currentLang !== 'undefined') {
+    langSelect.value = currentLang
+  }
+  if (typeof updateUIAllText === 'function') {
+    updateUIAllText() // 觸發全頁翻譯替換
+  }
   await loadMediaFiles()
   await loadSoundConfigs()
   await initDevices()
@@ -25,12 +32,22 @@ window.addEventListener('DOMContentLoaded', async () => {
   // 點擊選單外部自動關閉下拉框
   document.addEventListener('click', (e) => {
     const dropdown = document.getElementById('device-dropdown')
-    const btn = document.getElementById('device-dropdown-btn')
     if (dropdown && !dropdown.contains(e.target) && !e.target.closest('#device-dropdown-btn')) {
       dropdown.classList.add('hidden')
     }
   })
 })
+
+// 儲存媒體檔紀錄 (主動寫入 media.json)
+async function saveMediaFiles() {
+  try {
+    if (window.ipcRenderer && ipcRenderer.invoke) {
+      await ipcRenderer.invoke('save-media-files', mediaFiles)
+    }
+  } catch (err) {
+    console.error('儲存媒體庫紀錄失敗:', err)
+  }
+}
 
 function switchTab(tabName) {
   const tabs = ['media', 'editor', 'sounds']
@@ -58,7 +75,7 @@ function switchTab(tabName) {
 }
 
 // ==========================================
-// 2. 音訊裝置選取與記憶邏輯 (修正版)
+// 2. 音訊裝置選取與記憶邏輯
 // ==========================================
 async function initDevices() {
   try {
@@ -99,7 +116,6 @@ async function initDevices() {
       checkbox.checked = isChecked
       checkbox.className = 'device-checkbox rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer'
       
-      // 使用 EventListener 監聽選取變化
       checkbox.addEventListener('change', onDeviceSelectionChange)
 
       const span = document.createElement('span')
@@ -129,7 +145,6 @@ async function onDeviceSelectionChange() {
   const checkboxes = document.querySelectorAll('.device-checkbox:checked')
   selectedDeviceIds = Array.from(checkboxes).map(cb => cb.value)
 
-  // 若完全沒有勾選，預設採用系統預設裝置
   if (selectedDeviceIds.length === 0) {
     selectedDeviceIds = ['default']
   }
@@ -148,50 +163,161 @@ function updateDeviceCountDisplay() {
 // ==========================================
 // 3. 資源庫 (Media Library) 與 Drag & Drop
 // ==========================================
+
+// 頁面初始化時讀取歷史資料
 async function loadMediaFiles() {
   mediaFiles = await ipcRenderer.invoke('load-media-files')
-  renderMediaList()
+  await renderMediaList()
 }
 
-function renderMediaList() {
+let pendingDeleteMediaId = null
+
+// 輔助函式：將秒數轉為 mm:ss 格式
+function formatDuration(seconds) {
+  if (!seconds || isNaN(seconds) || !isFinite(seconds)) return '--:--'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+// 輔助函式：非同步獲取音訊檔案長度
+function getAudioDuration(filePath) {
+  return new Promise((resolve) => {
+    const formattedPath = filePath.startsWith('file://') ? filePath : `file://${filePath}`
+    const tempAudio = new Audio(formattedPath)
+    
+    tempAudio.addEventListener('loadedmetadata', () => {
+      resolve(tempAudio.duration)
+    })
+    
+    tempAudio.addEventListener('error', () => {
+      resolve(null)
+    })
+  })
+}
+
+// 清理檔名或優先使用 originalName 顯示
+function getCleanFileName(media) {
+  if (!media) return ''
+  
+  // 若為物件且有記錄原始名稱，優先採用
+  if (typeof media === 'object' && media.originalName) {
+    return media.originalName
+  }
+
+  const fileName = typeof media === 'object' ? media.name : media
+  if (!fileName) return ''
+
+  let cleanName = fileName
+  const extMatch = cleanName.match(/\.[^/.]+$/)
+  const ext = extMatch ? extMatch[0] : ''
+  cleanName = cleanName.replace(/\.[^/.]+$/, '')
+
+  cleanName = cleanName.replace(/[-_]\d{10,}$/g, '')
+  cleanName = cleanName.replace(/[-_][a-zA-Z0-9]{8,}$/g, '')
+
+  return (cleanName.trim() || fileName.replace(/\.[^/.]+$/, '')) + ext
+}
+
+// 渲染資源庫列表（防卡死核心修正：動態過濾已消失的實體檔案）
+async function renderMediaList() {
   const container = document.getElementById('media-list')
   if (!container) return
   container.innerHTML = ''
 
-  if (mediaFiles.length === 0) {
-    container.innerHTML = '<div class="text-xs text-slate-500 text-center py-8">尚未匯入任何媒體檔案</div>'
+  if (!Array.isArray(mediaFiles) || mediaFiles.length === 0) {
+    const emptyMsg = typeof t === 'function' ? t('media.empty') : '尚無媒體檔案'
+    container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">${emptyMsg}</div>`
     return
   }
 
-  mediaFiles.forEach(media => {
+  // --- [修正點 1] 先過濾出存在於實體硬碟的檔案 ---
+  const validMediaFiles = []
+  let hasMissing = false
+
+  for (const media of mediaFiles) {
+    const exists = await ipcRenderer.invoke('check-file-exists', media.path)
+    if (exists) {
+      validMediaFiles.push(media)
+    } else {
+      hasMissing = true
+      console.warn(`媒體檔案已不存在，自動過濾: ${media.path}`)
+    }
+  }
+
+  // 若發現有不存在的檔案，同步更新記憶體與 JSON
+  if (hasMissing) {
+    mediaFiles = validMediaFiles
+    await saveMediaFiles()
+  }
+
+  if (mediaFiles.length === 0) {
+    const emptyMsg = typeof t === 'function' ? t('media.empty') : '尚無媒體檔案'
+    container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">${emptyMsg}</div>`
+    return
+  }
+
+  // --- 渲染有效檔案 ---
+  for (const media of mediaFiles) {
     const item = document.createElement('div')
     item.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center hover:border-slate-700 transition'
+    
+    const displayName = getCleanFileName(media)
+
+    let durationLoadingText = typeof t === 'function' ? t('media.durationLoading') : '載入中...'
+    let durationLabel = typeof t === 'function' ? t('media.duration') : '長度'
+    let btnEditText = typeof t === 'function' ? t('media.btnEdit') : '編輯'
+    let btnDeleteText = typeof t === 'function' ? t('media.btnDelete') : '刪除'
+
+    let durationText = typeof media.duration === 'number' ? formatDuration(media.duration) : durationLoadingText
+
     item.innerHTML = `
       <div class="truncate pr-4">
-        <div class="text-xs font-semibold text-slate-200 truncate">${media.name}</div>
-        <div class="text-[10px] text-slate-500 truncate">${media.path}</div>
+        <div class="text-xs font-semibold text-slate-200 truncate" title="${displayName}">${displayName}</div>
+        <div class="text-[10px] text-indigo-400 font-mono mt-0.5">
+          ⏱️ ${durationLabel}: <span id="duration-${media.id}">${durationText}</span>
+        </div>
       </div>
-      <button onclick="openInEditor('${media.id}')" class="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 text-xs px-3 py-1.5 rounded-lg transition shrink-0">
-        編輯音效
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="openInEditor('${media.id}')" class="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 text-xs px-3 py-1.5 rounded-lg transition">
+          ${btnEditText}
+        </button>
+        <button onclick="confirmDeleteMedia(event, '${media.id}', '${displayName}')" class="bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/20 text-xs px-2.5 py-1.5 rounded-lg transition">
+          🗑️ ${btnDeleteText}
+        </button>
+      </div>
     `
     container.appendChild(item)
-  })
+
+    if (typeof media.duration !== 'number') {
+      getAudioDuration(media.path).then(dur => {
+        if (dur) {
+          media.duration = dur
+          const span = document.getElementById(`duration-${media.id}`)
+          if (span) span.textContent = formatDuration(dur)
+        }
+      })
+    }
+  }
 }
 
+// 點擊按鈕匯入媒體檔案
 async function importMediaFiles(event) {
   if (!event || !event.target || !event.target.files) return
   const files = Array.from(event.target.files)
   for (const file of files) {
-    const path = webUtils.getPathForFile(file)
-    const savedMedia = await ipcRenderer.invoke('import-media', path)
-    if (savedMedia) {
-      mediaFiles.push(savedMedia)
+    const filePath = webUtils.getPathForFile(file)
+    const res = await ipcRenderer.invoke('import-media', filePath)
+    if (res && res.success) {
+      mediaFiles = res.list // 使用 IPC 回傳之最新列表
+    } else if (res && res.error) {
+      alert('匯入失敗: ' + res.error)
     }
   }
-  renderMediaList()
+  await renderMediaList()
 }
 
+// 拖放檔案匯入
 function setupDragAndDrop() {
   const mediaTab = document.getElementById('tab-media')
   if (!mediaTab) return
@@ -208,15 +334,75 @@ function setupDragAndDrop() {
     const files = Array.from(e.dataTransfer.files)
     for (const file of files) {
       if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|flac)$/i)) {
-        const path = webUtils.getPathForFile(file)
-        const savedMedia = await ipcRenderer.invoke('import-media', path)
-        if (savedMedia) {
-          mediaFiles.push(savedMedia)
+        const filePath = webUtils.getPathForFile(file)
+        const res = await ipcRenderer.invoke('import-media', filePath)
+        if (res && res.success) {
+          mediaFiles = res.list // 使用 IPC 回傳之最新列表
         }
       }
     }
-    renderMediaList()
+    await renderMediaList()
   })
+}
+
+// 觸發資源庫移除對話框
+function confirmDeleteMedia(event, mediaId, mediaName) {
+  event.stopPropagation()
+  pendingDeleteMediaId = mediaId
+
+  const modal = document.getElementById('delete-media-modal')
+  const msgEl = document.getElementById('delete-media-modal-msg')
+  const confirmBtn = document.getElementById('confirm-delete-media-btn')
+
+  if (msgEl) {
+    const deleteMsg = typeof t === 'function' 
+      ? t('media.deleteConfirm', { name: mediaName }) 
+      : `確定要刪除「${mediaName}」嗎？`
+    msgEl.textContent = deleteMsg
+  }
+
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      await executeDeleteMedia()
+    }
+  }
+
+  if (modal) {
+    modal.classList.remove('hidden')
+  }
+}
+
+// 關閉資源庫 Modal
+function closeDeleteMediaModal() {
+  const modal = document.getElementById('delete-media-modal')
+  if (modal) {
+    modal.classList.add('hidden')
+  }
+  pendingDeleteMediaId = null
+}
+
+// 執行移除動作
+async function executeDeleteMedia() {
+  if (!pendingDeleteMediaId) return
+
+  const targetMedia = mediaFiles.find(m => m.id === pendingDeleteMediaId)
+
+  if (targetMedia) {
+    // 1. 移除實體檔案至回收桶
+    if (targetMedia.path) {
+      const res = await ipcRenderer.invoke('delete-physical-file', targetMedia.path)
+      if (!res.success) {
+        console.warn('檔案移至回收桶失敗（可能檔案已被手動刪除）:', res.error)
+      }
+    }
+
+    // 2. 從記憶體中過濾並持久化至 JSON
+    mediaFiles = mediaFiles.filter(m => m.id !== pendingDeleteMediaId)
+    await saveMediaFiles()
+  }
+
+  closeDeleteMediaModal()
+  await renderMediaList()
 }
 
 // ==========================================
@@ -230,16 +416,26 @@ function updateVolumeDisplay(val) {
   }
 }
 
-function openInEditor(mediaId) {
+async function openInEditor(mediaId) {
   activeMedia = mediaFiles.find(m => m.id === mediaId)
   if (!activeMedia) return
+
+  // --- [修正點 2] 開啟 Wavesurfer 前先確認實體檔案是否存在 ---
+  const exists = await ipcRenderer.invoke('check-file-exists', activeMedia.path)
+  if (!exists) {
+    alert('該實體檔案已消失或無法讀取！')
+    await renderMediaList() // 重新刷新並清除無效紀錄
+    return
+  }
 
   const titleEl = document.getElementById('editor-source-title')
   const nameInput = document.getElementById('sound-name-input')
   const volInput = document.getElementById('sound-volume-input')
 
-  if (titleEl) titleEl.textContent = activeMedia.name
-  if (nameInput) nameInput.value = activeMedia.name.replace(/\.[^/.]+$/, "")
+  const displayName = getCleanFileName(activeMedia)
+
+  if (titleEl) titleEl.textContent = displayName
+  if (nameInput) nameInput.value = displayName.replace(/\.[^/.]+$/, "")
   
   if (volInput) {
     volInput.value = 50
@@ -286,6 +482,10 @@ function initWavesurfer() {
   wsRegions.on('region-updated', (region) => {
     currentRegion = region
     updateTimeDisplay()
+  })
+
+  wavesurfer.on('error', (err) => {
+    console.error('Wavesurfer 載入錯誤:', err)
   })
 }
 
@@ -352,14 +552,20 @@ function renderSoundGrid() {
   if (!grid) return
   grid.innerHTML = ''
 
-  if (soundConfigs.length === 0) {
-    grid.innerHTML = '<div class="col-span-full text-xs text-slate-500 text-center py-12">音效庫空空如也，請先從資源庫編輯並儲存音效</div>'
+  if (!Array.isArray(soundConfigs) || soundConfigs.length === 0) {
+    const emptyMsg = typeof t === 'function' ? t('sounds.empty') : '尚無設定的音效'
+    grid.innerHTML = `<div class="col-span-full text-xs text-slate-500 text-center py-12">${emptyMsg}</div>`
     return
   }
 
   soundConfigs.forEach(sound => {
     const card = document.createElement('div')
     card.className = 'group relative bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl p-4 flex flex-col justify-between transition shadow-lg'
+    
+    let rangeLabel = typeof t === 'function' ? t('sounds.range') : '範圍'
+    let volumeLabel = typeof t === 'function' ? t('sounds.volume') : '音量'
+    let btnDeleteText = typeof t === 'function' ? t('sounds.btnDelete') : '刪除'
+
     card.innerHTML = `
       <div onclick="playConfiguredSound('${sound.id}')" class="cursor-pointer">
         <div class="flex justify-between items-start mb-2">
@@ -367,14 +573,14 @@ function renderSoundGrid() {
           ${sound.shortcut ? `<span class="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded font-mono">${sound.shortcut}</span>` : ''}
         </div>
         <div class="text-[11px] text-slate-400 font-mono">
-          範圍: ${sound.start}s - ${sound.end}s | 音量: ${Math.round((sound.volume || 0.5) * 100)}%
+          ${rangeLabel}: ${sound.start}s - ${sound.end}s | ${volumeLabel}: ${Math.round((sound.volume || 0.5) * 100)}%
         </div>
       </div>
 
       <div class="flex justify-end pt-3 mt-2 border-t border-slate-800/50">
         <button onclick="confirmDeleteSound(event, '${sound.id}', '${sound.name}')" 
                 class="text-xs text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 px-2 py-1 rounded transition">
-          🗑️ 刪除
+          ${btnDeleteText}
         </button>
       </div>
     `
@@ -382,22 +588,64 @@ function renderSoundGrid() {
   })
 }
 
-async function confirmDeleteSound(event, soundId, soundName) {
+let pendingDeleteSoundId = null
+
+function confirmDeleteSound(event, soundId, soundName) {
   event.stopPropagation()
-  const result = confirm(`確定要刪除音效「${soundName}」嗎？此操作無法復原。`)
-  if (result) {
-    soundConfigs = soundConfigs.filter(s => s.id !== soundId)
-    await ipcRenderer.invoke('save-sound-configs', soundConfigs)
-    renderSoundGrid()
+  pendingDeleteSoundId = soundId
+
+  const modal = document.getElementById('delete-modal')
+  const msgEl = document.getElementById('delete-modal-msg')
+  const confirmBtn = document.getElementById('confirm-delete-btn')
+
+  if (msgEl) {
+    const deleteMsg = typeof t === 'function' 
+      ? t('sounds.deleteConfirm', { name: soundName }) 
+      : `確定要刪除音效「${soundName}」嗎？`
+    msgEl.textContent = deleteMsg
+  }
+
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      await executeDeleteSound()
+    }
+  }
+
+  if (modal) {
+    modal.classList.remove('hidden')
   }
 }
 
-// 核心：多裝置同步播放 (修正版)
-// 核心：多裝置同步播放 (修正 Session 自動移除邏輯)
+function closeDeleteModal() {
+  const modal = document.getElementById('delete-modal')
+  if (modal) {
+    modal.classList.add('hidden')
+  }
+  pendingDeleteSoundId = null
+}
+
+async function executeDeleteSound() {
+  if (!pendingDeleteSoundId) return
+
+  soundConfigs = soundConfigs.filter(s => s.id !== pendingDeleteSoundId)
+  await ipcRenderer.invoke('save-sound-configs', soundConfigs)
+
+  closeDeleteModal()
+  renderSoundGrid()
+}
+
+// 核心：多裝置同步播放（防卡死修正：檢查實體檔案）
 async function playConfiguredSound(soundId) {
   const sound = soundConfigs.find(s => s.id === soundId)
   if (!sound) {
     console.error('找不到對應的音效設定:', soundId)
+    return
+  }
+
+  // --- [修正點 3] 播放前檢查實體檔案是否存在 ---
+  const exists = await ipcRenderer.invoke('check-file-exists', sound.mediaPath)
+  if (!exists) {
+    alert(`無法播放：原始媒體檔案「${sound.name}」已不存在或被移除。`)
     return
   }
 
@@ -409,12 +657,10 @@ async function playConfiguredSound(soundId) {
     targetDevices = ['default']
   }
 
-  // 用於追蹤此 Session 中已結束播放的音訊數量
   let finishedCount = 0
 
   const handleAudioEnd = () => {
     finishedCount++
-    // 當所有裝置的播放都完成時，自動從右側側邊欄/Session 中移除
     if (finishedCount >= targetDevices.length) {
       stopSession(playingId)
     }
@@ -440,7 +686,6 @@ async function playConfiguredSound(soundId) {
       }
     }
 
-    // 1. 時間到達指定 end 秒數時主動截斷並觸發結束
     const checkTime = () => {
       if (audio.currentTime >= sound.end) {
         triggerEndOnce()
@@ -448,10 +693,8 @@ async function playConfiguredSound(soundId) {
     }
 
     audio.addEventListener('timeupdate', checkTime)
-    // 2. 音檔本身自然播完時觸發結束
     audio.addEventListener('ended', triggerEndOnce)
 
-    // 播放授權處理
     try {
       const playPromise = audio.play()
       if (playPromise !== undefined) {
@@ -459,7 +702,7 @@ async function playConfiguredSound(soundId) {
       }
     } catch (playError) {
       console.error(`[Audio Play Error] 裝置 ${deviceId} 播放失敗:`, playError)
-      triggerEndOnce() // 若播放失敗，同樣計入結束
+      triggerEndOnce()
       continue
     }
 
@@ -522,22 +765,27 @@ function updateActivePlayingSidebar() {
   if (!container) return
 
   if (activePlayingSessions.length === 0) {
-    container.innerHTML = '<div id="no-playing-tip" class="text-xs text-slate-500 text-center py-8">目前沒有音效在播放</div>'
+    const noPlayingText = typeof t === 'function' ? t('sidebar.noPlaying') : '目前沒有播放中的音效'
+    container.innerHTML = `<div id="no-playing-tip" class="text-xs text-slate-500 text-center py-8">${noPlayingText}</div>`
     return
   }
 
   container.innerHTML = ''
   activePlayingSessions.forEach(session => {
     const item = document.createElement('div')
-    item.className = 'bg-slate-900 border border-indigo-500/30 rounded-lg p-3 flex justify-between items-center shadow-md'
+    item.className = 'bg-slate-900 border border-indigo-500/30 rounded-lg p-3 flex justify-between items-center shadow-md mb-2'
+    
+    let devicesCountText = typeof t === 'function' ? t('sidebar.devicesCount') : '裝置數'
+    let stopText = typeof t === 'function' ? (t('sidebar.stop') || '停止') : '停止'
+
     item.innerHTML = `
       <div class="overflow-hidden pr-2">
         <div class="text-xs font-semibold text-slate-200 truncate">${session.sound.name}</div>
-        <div class="text-[10px] text-indigo-400 font-mono">輸出裝置數: ${session.audioInstances.length}</div>
+        <div class="text-[10px] text-indigo-400 font-mono">${devicesCountText}: ${session.audioInstances.length}</div>
       </div>
       <button onclick="stopSession('${session.playingId}')" 
               class="bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs px-2.5 py-1 rounded transition shrink-0">
-        ■ 停止
+        ■ ${stopText}
       </button>
     `
     container.appendChild(item)
