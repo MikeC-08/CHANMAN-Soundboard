@@ -15,12 +15,16 @@ const translations = {
     // 資源庫
     'media.empty': '尚未匯入任何媒體檔案',
     'media.btnEdit': '編輯音效',
+    'media.btnImportFromLocal': '從本地匯入',
+    'placeholder.searchAudio': '搜尋音效檔案',
+
     // 在 translations['zh-TW'] 加入：
     'media.duration': '時長',
     'media.durationLoading': '計算時長中...',
     'media.btnDelete': '移除',
     'media.deleteTitle': '移除媒體檔案',
     'media.deleteConfirm': '確定要移除「{name}」嗎？檔案將會移至資源回收桶。',
+    
 
     // 編輯頁
     'editor.nameLabel': '音效名稱',
@@ -64,6 +68,8 @@ const translations = {
     // Media Library
     'media.empty': 'No media files imported yet',
     'media.btnEdit': 'Edit Sound',
+    'media.btnImportFromLocal': 'Import From Local',
+    'placeholder.searchAudio': 'Search Audio',
     // 在 translations['en'] 加入：
     'media.duration': 'Duration',
     'media.durationLoading': 'Loading duration...',
@@ -124,7 +130,10 @@ function updateUIAllText() {
     const key = el.getAttribute('data-i18n')
     el.textContent = t(key)
   })
-  
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    el.placeholder = t(key);
+  })
   // 更新動態產生的卡片內容
   if (typeof renderMediaList === 'function') renderMediaList()
   if (typeof renderSoundGrid === 'function') renderSoundGrid()

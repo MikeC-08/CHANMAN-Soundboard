@@ -54,12 +54,12 @@
     <section id="tab-media" class="h-full flex flex-col hidden">
       <div class="flex justify-between items-center mb-4">
         <!-- 搜尋列 -->
-        <input type="text" id="media-search" oninput="filterMediaList()" placeholder="搜尋原始檔案..." class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500 w-64">
+        <input type="text" id="media-search" oninput="filterMediaList()" data-i18n-placeholder="placeholder.searchAudio" placeholder="搜尋音效檔案..." class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500 w-64">
         
         <!-- 匯入原始檔案 -->
         <input type="file" id="media-file-input" accept="audio/*" class="hidden" multiple onchange="importMediaFiles(event)">
         <button onclick="document.getElementById('media-file-input').click()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg transition">
-          + 匯入原始檔案
+          + <span data-i18n="media.btnImportFromLocal">從本地匯入</span>
         </button>
       </div>
 

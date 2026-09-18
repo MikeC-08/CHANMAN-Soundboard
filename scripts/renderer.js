@@ -170,6 +170,58 @@ async function loadMediaFiles() {
   await renderMediaList()
 }
 
+// ==========================================
+// 3.1 模糊搜尋與動態過濾邏輯
+// ==========================================
+
+function fuzzyMatch(pattern, str) {
+  if (!pattern) return 0; // 若無輸入搜尋字詞，預設全部通過
+  
+  const patternLower = pattern.toLowerCase();
+  const strLower = str.toLowerCase();
+
+  // 1. 優先處理「連續子字串匹配」（完全包含關鍵字）
+  const directIndex = strLower.indexOf(patternLower);
+  if (directIndex !== -1) {
+    return directIndex; // 精確匹配優先度最高，依照出現位置給分
+  }
+
+  // 2. 次要處理「不連續字元匹配」（例如 bgm -> background_music）
+  let pIdx = 0;
+  let firstMatchIdx = -1;
+  let lastMatchIdx = -1;
+
+  for (let sIdx = 0; sIdx < strLower.length; sIdx++) {
+    if (strLower[sIdx] === patternLower[pIdx]) {
+      if (pIdx === 0) firstMatchIdx = sIdx;
+      lastMatchIdx = sIdx;
+      pIdx++;
+      if (pIdx === patternLower.length) break;
+    }
+  }
+
+  // 必須所有 pattern 字元都有順序地出現
+  if (pIdx === patternLower.length) {
+    // 跨度越短得分越高 (例如: 'bgm' 匹配 'bg_music' 距離比 'b_a_g_m' 短)
+    const distanceBonus = lastMatchIdx - firstMatchIdx;
+    return 1000 + distanceBonus; 
+  }
+
+  return null; // 未匹配成功
+}
+
+/**
+ * 搜尋框輸入事件 handler
+ */
+async function filterMediaList() {
+  const searchInput = document.getElementById('media-search');
+  const query = searchInput ? searchInput.value.trim() : '';
+
+  // 呼叫 renderMediaList 並帶入搜尋條件
+  await renderMediaList(query);
+}
+
+
 let pendingDeleteMediaId = null
 
 // 輔助函式：將秒數轉為 mm:ss 格式
@@ -220,56 +272,84 @@ function getCleanFileName(media) {
 }
 
 // 渲染資源庫列表（防卡死核心修正：動態過濾已消失的實體檔案）
-async function renderMediaList() {
-  const container = document.getElementById('media-list')
-  if (!container) return
-  container.innerHTML = ''
+// 渲染資源庫列表（支援模糊搜尋過濾）
+async function renderMediaList(searchQuery = '') {
+  const container = document.getElementById('media-list');
+  if (!container) return;
+  container.innerHTML = '';
 
   if (!Array.isArray(mediaFiles) || mediaFiles.length === 0) {
-    const emptyMsg = typeof t === 'function' ? t('media.empty') : '尚無媒體檔案'
-    container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">${emptyMsg}</div>`
-    return
+    const emptyMsg = typeof t === 'function' ? t('media.empty') : '尚無媒體檔案';
+    container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">${emptyMsg}</div>`;
+    return;
   }
 
-  // --- [修正點 1] 先過濾出存在於實體硬碟的檔案 ---
-  const validMediaFiles = []
-  let hasMissing = false
+  // --- 步驟 1: 過濾出實體檔案存在的清單 ---
+  const validMediaFiles = [];
+  let hasMissing = false;
 
   for (const media of mediaFiles) {
-    const exists = await ipcRenderer.invoke('check-file-exists', media.path)
+    const exists = await ipcRenderer.invoke('check-file-exists', media.path);
     if (exists) {
-      validMediaFiles.push(media)
+      validMediaFiles.push(media);
     } else {
-      hasMissing = true
-      console.warn(`媒體檔案已不存在，自動過濾: ${media.path}`)
+      hasMissing = true;
+      console.warn(`媒體檔案已不存在，自動過濾: ${media.path}`);
     }
   }
 
   // 若發現有不存在的檔案，同步更新記憶體與 JSON
   if (hasMissing) {
-    mediaFiles = validMediaFiles
-    await saveMediaFiles()
+    mediaFiles = validMediaFiles;
+    await saveMediaFiles();
   }
 
   if (mediaFiles.length === 0) {
-    const emptyMsg = typeof t === 'function' ? t('media.empty') : '尚無媒體檔案'
-    container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">${emptyMsg}</div>`
-    return
+    const emptyMsg = typeof t === 'function' ? t('media.empty') : '尚無媒體檔案';
+    container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">${emptyMsg}</div>`;
+    return;
   }
 
-  // --- 渲染有效檔案 ---
-  for (const media of mediaFiles) {
-    const item = document.createElement('div')
-    item.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center hover:border-slate-700 transition'
+  // --- 步驟 2: 執行模糊搜尋與排序 ---
+  let displayList = mediaFiles;
+
+  if (searchQuery) {
+    const scoredList = [];
     
-    const displayName = getCleanFileName(media)
+    for (const media of mediaFiles) {
+      const displayName = getCleanFileName(media);
+      const score = fuzzyMatch(searchQuery, displayName);
 
-    let durationLoadingText = typeof t === 'function' ? t('media.durationLoading') : '載入中...'
-    let durationLabel = typeof t === 'function' ? t('media.duration') : '長度'
-    let btnEditText = typeof t === 'function' ? t('media.btnEdit') : '編輯'
-    let btnDeleteText = typeof t === 'function' ? t('media.btnDelete') : '刪除'
+      if (score !== null) {
+        scoredList.push({ media, score });
+      }
+    }
 
-    let durationText = typeof media.duration === 'number' ? formatDuration(media.duration) : durationLoadingText
+    // 依分數排序 (分數小者排前面)
+    scoredList.sort((a, b) => a.score - b.score);
+    displayList = scoredList.map(item => item.media);
+  }
+
+  // 搜尋結果為空時的提示
+  if (displayList.length === 0) {
+    const noResultMsg = typeof t === 'function' ? t('media.noResult') : '找不到符合的媒體檔案';
+    container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8">${noResultMsg}</div>`;
+    return;
+  }
+
+  // --- 步驟 3: 渲染最終列表 ---
+  for (const media of displayList) {
+    const item = document.createElement('div');
+    item.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center hover:border-slate-700 transition';
+    
+    const displayName = getCleanFileName(media);
+
+    let durationLoadingText = typeof t === 'function' ? t('media.durationLoading') : '載入中...';
+    let durationLabel = typeof t === 'function' ? t('media.duration') : '長度';
+    let btnEditText = typeof t === 'function' ? t('media.btnEdit') : '編輯';
+    let btnDeleteText = typeof t === 'function' ? t('media.btnDelete') : '刪除';
+
+    let durationText = typeof media.duration === 'number' ? formatDuration(media.duration) : durationLoadingText;
 
     item.innerHTML = `
       <div class="truncate pr-4">
@@ -286,17 +366,17 @@ async function renderMediaList() {
           🗑️ ${btnDeleteText}
         </button>
       </div>
-    `
-    container.appendChild(item)
+    `;
+    container.appendChild(item);
 
     if (typeof media.duration !== 'number') {
       getAudioDuration(media.path).then(dur => {
         if (dur) {
-          media.duration = dur
-          const span = document.getElementById(`duration-${media.id}`)
-          if (span) span.textContent = formatDuration(dur)
+          media.duration = dur;
+          const span = document.getElementById(`duration-${media.id}`);
+          if (span) span.textContent = formatDuration(dur);
         }
-      })
+      });
     }
   }
 }
@@ -567,23 +647,25 @@ function renderSoundGrid() {
     let btnDeleteText = typeof t === 'function' ? t('sounds.btnDelete') : '刪除'
 
     card.innerHTML = `
-      <div onclick="playConfiguredSound('${sound.id}')" class="cursor-pointer">
-        <div class="flex justify-between items-start mb-2">
-          <h4 class="font-semibold text-sm text-slate-100 group-hover:text-indigo-400 transition truncate">${sound.name}</h4>
-          ${sound.shortcut ? `<span class="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded font-mono">${sound.shortcut}</span>` : ''}
+    <div onclick="playConfiguredSound('${sound.id}')" class="cursor-pointer">
+        <div class="flex justify-between items-start mb-2 gap-2">
+        <h4 class="font-semibold text-sm text-slate-100 group-hover:text-indigo-400 transition line-clamp-2 break-words min-w-0">
+            ${sound.name}
+        </h4>
+        ${sound.shortcut ? `<span class="shrink-0 text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded font-mono">${sound.shortcut}</span>` : ''}
         </div>
         <div class="text-[11px] text-slate-400 font-mono">
-          ${rangeLabel}: ${sound.start}s - ${sound.end}s | ${volumeLabel}: ${Math.round((sound.volume || 0.5) * 100)}%
+        ${rangeLabel}: ${sound.start}s - ${sound.end}s | ${volumeLabel}: ${Math.round((sound.volume || 0.5) * 100)}%
         </div>
-      </div>
+    </div>
 
-      <div class="flex justify-end pt-3 mt-2 border-t border-slate-800/50">
+    <div class="flex justify-end pt-3 mt-2 border-t border-slate-800/50">
         <button onclick="confirmDeleteSound(event, '${sound.id}', '${sound.name}')" 
                 class="text-xs text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 px-2 py-1 rounded transition">
-          ${btnDeleteText}
+        ${btnDeleteText}
         </button>
-      </div>
-    `
+    </div>
+    `;
     grid.appendChild(card)
   })
 }

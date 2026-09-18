@@ -58,7 +58,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
-    }
+    },
+    autoHideMenuBar: true,
   })
 
   win.loadFile('index.html')
@@ -91,7 +92,8 @@ ipcMain.handle('import-media', async (event, filePath) => {
 
     // 讀取舊清單、加入新檔案並寫入 JSON
     const list = readMediaConfig()
-    list.push(newMedia)
+    // list.push(newMedia)
+    list.unshift(newMedia)
     writeMediaConfig(list)
 
     return { success: true, data: newMedia, list }
