@@ -1,4 +1,6 @@
 const { ipcRenderer, webUtils } = require('electron')
+const path = require('path');
+const url = require('url');
 
 // 全域狀態管理
 let mediaFiles = []
@@ -235,7 +237,7 @@ function formatDuration(seconds) {
 // 輔助函式：非同步獲取音訊檔案長度
 function getAudioDuration(filePath) {
   return new Promise((resolve) => {
-    const formattedPath = filePath.startsWith('file://') ? filePath : `file://${filePath}`
+    const formattedPath = filePath.startsWith('file://') ? filePath : url.pathToFileURL(filePath)
     const tempAudio = new Audio(formattedPath)
     
     tempAudio.addEventListener('loadedmetadata', () => {
@@ -528,7 +530,7 @@ async function openInEditor(mediaId) {
     initWavesurfer()
   }
   
-  wavesurfer.load(`file://${activeMedia.path}`)
+  wavesurfer.load(url.pathToFileURL(activeMedia.path))
 }
 
 function initWavesurfer() {
@@ -751,7 +753,7 @@ async function playConfiguredSound(soundId) {
   for (const deviceId of targetDevices) {
     const formattedPath = sound.mediaPath.startsWith('file://') 
       ? sound.mediaPath 
-      : `file://${sound.mediaPath}`
+      : url.pathToFileURL(sound.mediaPath)
 
     const audio = new Audio(formattedPath)
     audio.volume = typeof sound.volume === 'number' ? sound.volume : 0.5
