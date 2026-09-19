@@ -3,7 +3,7 @@ const path = require('path')
 const fs = require('fs')
 
 // 定義目錄與檔案路徑
-const assetsDir = path.join(__dirname, 'assets')
+const assetsDir = path.join(app.getPath('userData'), 'assets')
 const mediaDir = path.join(assetsDir, 'media')
 const configsDir = path.join(assetsDir, 'configs')
 const configFile = path.join(configsDir, 'sound_configs.json')

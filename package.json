@@ -8,18 +8,30 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dist": "electron-builder"
   },
   "devDependencies": {
-    "electron": "^44.4.1"
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3"
   },
   "build": {
-    "extraResources": [
-      {
-        "from": "bin",
-        "to": "bin",
-        "filter": ["**/*"]
-      }
-    ]
+    "appId": "com.chanman.chanman-soundboard",
+    "productName": "chanman-soundboard",
+    "directories": {
+      "output": "dist"
+    },
+    "win": { 
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
