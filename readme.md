@@ -40,7 +40,7 @@
 
 * **Frontend / UI**: HTML5, JavaScript (CommonJS), [Tailwind CSS](https://tailwindcss.com/)
 
-* **Audio Processing**: [WaveSurfer.js](wavesurfer.xyz) v7
+* **Audio Processing**: [WaveSurfer.js](https://wavesurfer.xyz/) v7
 
 ## 📦 Installation & Getting Started
 
