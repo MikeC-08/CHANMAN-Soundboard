@@ -38,7 +38,79 @@ window.addEventListener('DOMContentLoaded', async () => {
       dropdown.classList.add('hidden')
     }
   })
+
+  await loadMediaFiles()
+    await loadSoundConfigs()
+    await initDevices()
+    setupDragAndDrop()
+
+    // 1. 監聽主進程傳來的快捷鍵觸發事件
+    ipcRenderer.on('trigger-sound-by-id', (event, soundId) => {
+      console.log('收到快捷鍵觸發訊號，soundId:', soundId); // 1. 除錯點：確認是否有收到訊號
+      playConfiguredSound(soundId)
+    })
+
+    // 2. 初始化快捷鍵輸入框捕獲邏輯
+    setupShortcutInput()
 })
+
+
+function setupShortcutInput() {
+  const shortcutInput = document.getElementById('sound-shortcut-input');
+  if (!shortcutInput) return;
+
+  shortcutInput.addEventListener('keydown', (e) => {
+    e.preventDefault();
+
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      shortcutInput.value = '';
+      return;
+    }
+
+    const keys = [];
+    if (e.ctrlKey) keys.push('CommandOrControl');
+    if (e.altKey) keys.push('Alt');
+    if (e.shiftKey) keys.push('Shift');
+
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+      return;
+    }
+
+    let keyName = '';
+
+    if (e.code.startsWith('Digit')) {
+      // 主鍵盤數字：Digit1 -> 1
+      keyName = e.code.replace('Digit', '');
+    } else if (e.code.startsWith('Numpad')) {
+      // 小鍵盤按鍵映射表 (使用 Electron 支援的 num 規範)
+      const numpadMap = {
+        Numpad0: 'num0',
+        Numpad1: 'num1',
+        Numpad2: 'num2',
+        Numpad3: 'num3',
+        Numpad4: 'num4',
+        Numpad5: 'num5',
+        Numpad6: 'num6',
+        Numpad7: 'num7',
+        Numpad8: 'num8',
+        Numpad9: 'num9',
+        NumpadAdd: 'numadd',
+        NumpadSubtract: 'numsub',
+        NumpadMultiply: 'nummult',
+        NumpadDivide: 'numdiv',
+        NumpadDecimal: 'numdec'
+      };
+      keyName = numpadMap[e.code] || e.code;
+    } else {
+      keyName = e.key;
+      if (keyName === ' ') keyName = 'Space';
+      if (keyName.length === 1) keyName = keyName.toUpperCase();
+    }
+
+    keys.push(keyName);
+    shortcutInput.value = keys.join('+');
+  });
+}
 
 // 儲存媒體檔紀錄 (主動寫入 media.json)
 async function saveMediaFiles() {
@@ -617,6 +689,9 @@ async function saveSoundConfig() {
   soundConfigs.push(newSound)
   await ipcRenderer.invoke('save-sound-configs', soundConfigs)
 
+  // 🌟 同步更新全域快捷鍵
+  await ipcRenderer.invoke('update-global-shortcuts', soundConfigs)
+
   renderSoundGrid()
   switchTab('sounds')
 }
@@ -626,6 +701,7 @@ async function saveSoundConfig() {
 // ==========================================
 async function loadSoundConfigs() {
   soundConfigs = await ipcRenderer.invoke('load-sound-configs')
+  await ipcRenderer.invoke('update-global-shortcuts', soundConfigs)
   renderSoundGrid()
 }
 
@@ -713,6 +789,9 @@ async function executeDeleteSound() {
 
   soundConfigs = soundConfigs.filter(s => s.id !== pendingDeleteSoundId)
   await ipcRenderer.invoke('save-sound-configs', soundConfigs)
+
+  // 🌟 刪除後同步更新全域快捷鍵
+  await ipcRenderer.invoke('update-global-shortcuts', soundConfigs)
 
   closeDeleteModal()
   renderSoundGrid()

@@ -1,6 +1,8 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, globalShortcut } = require('electron')
 const path = require('path')
 const fs = require('fs')
+
+let registeredShortcuts = {}
 
 // 定義目錄與檔案路徑
 const assetsDir = path.join(app.getPath('userData'), 'assets')
@@ -20,6 +22,46 @@ function initStorage() {
   if (!fs.existsSync(mediaConfigFile)) {
     fs.writeFileSync(mediaConfigFile, JSON.stringify([]), 'utf-8')
   }
+}
+function formatAccelerator(shortcutStr) {
+  if (!shortcutStr) return '';
+  return shortcutStr
+    .replace(/\bCtrl\b/gi, 'CommandOrControl')
+    .replace(/\bControl\b/gi, 'CommandOrControl')
+    .trim();
+}
+
+// 註冊全域快捷鍵函式
+function registerAllShortcuts(configs, mainWindow) {
+  // 先清空先前註冊的所有快捷鍵
+  globalShortcut.unregisterAll()
+  registeredShortcuts = {}
+
+  if (!Array.isArray(configs)) return
+  const win = mainWindow || BrowserWindow.getAllWindows()[0]
+
+  configs.forEach(sound => {
+    if (sound.shortcut && sound.shortcut.trim() !== '') {
+      const shortcutStr = sound.shortcut.trim()
+      
+      try {
+        const ret = globalShortcut.register(shortcutStr, () => {
+          // 當快捷鍵觸發時，通知渲染進程 (renderer.js) 播放對應音效
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('trigger-sound-by-id', sound.id)
+          }
+        })
+
+        if (!ret) {
+          console.warn(`快捷鍵註冊失敗: ${shortcutStr} (可能已被其他程式佔用)`)
+        } else {
+          registeredShortcuts[shortcutStr] = sound.id
+        }
+      } catch (err) {
+        console.error(`快捷鍵格式錯誤 [${shortcutStr}]:`, err)
+      }
+    }
+  })
 }
 
 // 輔助函式：讀取 media.json
@@ -45,6 +87,7 @@ function writeMediaConfig(data) {
     return false
   }
 }
+let win = null
 
 function createWindow() {
   initStorage()
@@ -66,6 +109,12 @@ function createWindow() {
 }
 
 // ---------------- IPC Handlers ----------------
+
+// 監聽前端發送過來的更新快捷鍵請求
+ipcMain.handle('update-global-shortcuts', (event, configs) => {
+  registerAllShortcuts(configs, win)
+  return true
+})
 
 // 1. 匯入媒體檔 (複製檔案 + 自動寫入 media.json)
 ipcMain.handle('import-media', async (event, filePath) => {
@@ -183,4 +232,9 @@ app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// 當應用程式離開或關閉時釋放快捷鍵
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
