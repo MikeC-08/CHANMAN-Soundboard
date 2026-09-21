@@ -90,7 +90,7 @@ chanman-soundboard/
 
 ## 📄 License
 
-This project is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/?utm_source=gemini) License.
+This project is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/) License.
 
 * **You are free to**: Share, copy, redistribute, and adapt the material.
 
