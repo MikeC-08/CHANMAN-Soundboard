@@ -1,6 +1,7 @@
 # CHANMAN's Soundboard
 
 **CHANMAN's Soundboard** is a desktop soundboard application built with Electron. Designed for streamers, podcasters, broadcasters, and sound enthusiasts, it supports multi-device synchronized audio output, visual audio trimming, hotkeys, and multi-language UI support.
+
 <img width="465" height="300" alt="image" src="https://github.com/user-attachments/assets/9fbef55a-8326-48d1-adc9-04ce66d2a26a" />
 <img width="465" height="300" alt="image" src="https://github.com/user-attachments/assets/3eb1ed60-b9d9-4918-a397-9ba796a1b5a4" />
 
